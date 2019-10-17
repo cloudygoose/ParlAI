@@ -39,17 +39,18 @@ task_config[
 <br>
 (You can keep accepting new HITs after you finish your current one, so keep working on it if you like the task!)
 <br>
-<b>
-In this task you will chitchat with a chat-bot with is a deep learning model.</b>
-The dialogue model is pre-trained with large-scale news data.
+In this task you will chitchat with a chat-bot with is a deep learning model.
+The dialogue model is pre-trained with large-scale news data. 
 <br>
-Chat with the other user naturally.
+This data is collected to help research at MIT, and it could be made publicly available.
 <br>
+Chat with the other user naturally. Try to discuss the assigned topic.
+<br> 
 Try to cut into the topic, no need to be polite (e.g. no need to begin with "hello").
 <br>
 <b>Send short messages, <span style="color:red">max 20 words</span>.</b>
 <br>
-After a given number of turns, you will be asked to <b>briefly</b> rate the bot on metrics like <b>fluency, engagingness, and consistency</b>.
+After a given number of turns, you will be asked to <b>briefly</b> rate the bot on metrics like <b>knowledge, fluency, engagingness, and consistency</b>.
 <br>
 There is a <b>2 min</b> time limit for each turn.
 <br>

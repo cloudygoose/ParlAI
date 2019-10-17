@@ -249,11 +249,12 @@ class MyAgentAgent(Agent):
         self.encode_fn = encode_fn
 
         def decode_fn(x):
-            if bpe is not None:
-                x = bpe.decode(x)
+            #if bpe is not None:
+            #    x = bpe.decode(x)
             if tokenizer is not None:
                 x = tokenizer.decode(x)
             x = x.replace("&apos;", "'")
+            x = x.replace('@@ ', '')
             x = x.replace("' ", "'")
             x = x.replace(" 'd", " would ")
             x = x.replace("n 't", "n't")
@@ -343,9 +344,10 @@ class MyAgentAgent(Agent):
  
         self.dialogue_history += ' ' + ts
         tt = self.dialogue_history.split()
+        print('test length of 128', len(tt))
         if len(tt) > 128:
             tt = tt[-128:]
-        self.dialogue_hisotry = ' '.join(tt)
+        self.dialogue_history = ' '.join(tt)
         return observation
 
     def act(self):

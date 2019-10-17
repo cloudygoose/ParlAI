@@ -16,7 +16,7 @@ import time
 import os
 import pickle
 import random
-
+import torch
 
 # Instruction messages
 ONBOARD_MSG = '\nWelcome! Below is your topic \
@@ -58,7 +58,7 @@ COPIED_CHARACTER_MSG = 'We found that you <b><span style="color:red">trivially \
         message again.'
 
 # Evaluation messages
-FLUENCY_MSG = 'Now the conversation is completed! \n Please evaluate the \
+FLUENCY_MSG = 'Please evaluate the \
         other person\'s <span style="color:blue"><b>fluency</b></span> during \
         this conversation by <b>entering a score from [1, 2, 3, 4, 5]</b> \
         below, <span style="color:blue">fluency reflects whether the other \
@@ -81,13 +81,19 @@ ENGAGINGNESS_MSG = 'Now please evaluate the other people\'s \
 ENGAGINGNESS_REASON_MSG = 'Please give a <b>reason for the engagingness \
         score</b> you gave above. Please try to give concrete examples.'
 CONSISTENCY_MSG = 'Now please evaluate the other people\'s \
-        <span style="color:blue"><b>consistency of persona</b></span> \
+        <span style="color:blue"><b>consistency</b></span> \
         (e.g. whether the reply is related to the context,)\
         during this conversation by <b>entering a score from \
         [1, 2, 3, 4, 5]</b> below: (1 means "not consistent at all" and 5 \
         means "extremely consistent", e.g., You can enter 3 for an OK \
-        consistency). <span style="color:red"><b>NOTE: following this you will \
-        be asked to give a reason for the score you choose.</b></span>'
+        consistency). '
+KNOWLEDGE_MSG = 'Now the conversation is completed! \n \
+        Now please evaluate the how  <span style="color:blue"><b> knowledgable </b></span> model is \
+        about the given topic. \
+        during this conversation by <b> entering a score from \
+        [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5] </b> below: (1 means "not knowledgable at all" and 5 \
+        means "extremely knowledgable", e.g., You can enter 3 for an OK \
+        knowledge level). '
 CONSISTENCY_REASON_MSG = 'Please give a <b>reason for the consistency score</b> \
         you gave above. If you gave a score that indicated the user was not \
         very consistent or only somewhat consistent, please try to give a \
@@ -150,15 +156,27 @@ class PersonasGenerator(object):
 
 class PersonaProfileWorld(MTurkOnboardWorld):
     """A world that provides a persona to the MTurkAgent"""
+    
+    news_terms = None
 
     def __init__(self, opt, mturk_agent):
         self.task_type = 'sandbox' if opt['is_sandbox'] else 'live'
         self.max_persona_time = opt['max_persona_time']
+        if PersonaProfileWorld.news_terms is None:
+            PersonaProfileWorld.news_terms = []
+            fn = '/data/sls/u/tianxing/toolkits/ParlAI-htx/parlai/mturk/tasks/convai2_model_eval/news_pair.txt'
+            print('loading news terms', fn)
+            for l in open(fn, 'r').readlines():
+                tt = l.strip().split('\t')
+                PersonaProfileWorld.news_terms.append(tt)
+            print('len:', len(PersonaProfileWorld.news_terms))
+            print('example:', PersonaProfileWorld.news_terms[:2])
         super().__init__(opt, mturk_agent)
 
     def parley(self):
-        persona_idx, data = self.mturk_agent.persona_generator.pop_persona()
-        model_persona_idx, model_data = self.mturk_agent.persona_generator.pop_persona()
+        news_idx = random.randint(0, len(PersonaProfileWorld.news_terms) - 1)
+        persona_idx, data = news_idx, PersonaProfileWorld.news_terms[news_idx][0] #self.mturk_agent.persona_generator.pop_persona()
+        model_persona_idx, model_data = news_idx, PersonaProfileWorld.news_terms[news_idx][0] #self.mturk_agent.persona_generator.pop_persona()
         self.mturk_agent.persona_idx = persona_idx
         self.mturk_agent.persona_data = data
         self.mturk_agent.model_persona = [model_persona_idx, model_data]
@@ -174,8 +192,9 @@ class PersonaProfileWorld(MTurkOnboardWorld):
                 s.strip()
             )
         """
-        persona_text = 'talk about daily life or some news'
-        
+        persona_text = '<b><span style="color:blue">' + PersonaProfileWorld.news_terms[news_idx][0] + '</span></b>:' + PersonaProfileWorld.news_terms[news_idx][1] + '<br>' + 'You can begin the dialogue with "' + 'tell me about ' + PersonaProfileWorld.news_terms[news_idx][0] + '." or something similar. Try to find out how much the bot knows about the topic, you can try to give the bot some hints :)'
+        self.persona_text = persona_text
+
         self.mturk_agent.observe(
             {
                 'id': 'SYSTEM',
@@ -231,9 +250,10 @@ class Convai2EvalWorld(MultiAgentDialogWorld):
         self.eng_reason = len(agents) * [None]
         self.consistent_score = len(agents) * [-1]
         self.consistent_reason = len(agents) * [None]
+        self.knowledge_score = len(agents) * [-1]
         self.persona_picked = len(agents) * [None]
         self.world_tag = world_tag
-        self.ratings = ['1', '2', '3', '4', '5']
+        self.ratings = ['1', '1.5', '2', '2.5', '3', '3.5', '4', '4.5', '5']
         super().__init__(opt, agents, shared)
 
         # set up model agent
@@ -253,7 +273,7 @@ class Convai2EvalWorld(MultiAgentDialogWorld):
             for ag in self.agents
         ]
         self.model_persona_text = '\n'.join(
-            ['your persona:' + pers for pers in self.agents[0].model_persona[1]]
+            ['your persona:' + self.agents[0].model_persona[1]]
         )
         print(self.model_persona_text)
 
@@ -268,13 +288,10 @@ class Convai2EvalWorld(MultiAgentDialogWorld):
         """If at first turn, we need to give each agent their persona"""
         if self.turn_idx == 1:
             for idx, agent in enumerate(self.agents):
-                persona_text = ''
-                #for s in self.personas[idx]:
-                #    persona_text += (
-                #        '<b><span style="color:blue">'
-                #        '{}\n</span></b>'.format(s.strip())
-                #    )
-                persona_text = 'talk about daily life or news'
+                persona_text = '' 
+                news_idx = agent.persona_idx
+                persona_text = '<b><span style="color:blue">' + PersonaProfileWorld.news_terms[news_idx][0] + '</span></b>:' + PersonaProfileWorld.news_terms[news_idx][1] + '<br>' + 'You can begin the dialogue with "' + 'tell me about ' + PersonaProfileWorld.news_terms[news_idx][0] + '." or something similar. Try to find out how much the bot knows about the topic, you can try to give the bot some hints :)'
+                #persona_text = 'talk about daily life or news'
                 control_msg['persona_text'] = persona_text
                 control_msg['text'] = self.get_instruction(
                     tag='start', agent_id=agent.id
@@ -308,9 +325,7 @@ class Convai2EvalWorld(MultiAgentDialogWorld):
                 control_msg['text'] = 'The model persona is: \n' + _text
                 #agent.observe(control_msg)
                 return
-            while self.is_msg_tooshortlong(acts[idx], agent) or self.is_exact_match(
-                acts[idx], agent
-            ):
+            while self.is_msg_tooshortlong(acts[idx], agent): #or self.is_exact_match(acts[idx], agent):
                 acts[idx] = agent.act()
 
             if acts[idx]['episode_done']:
@@ -324,6 +339,18 @@ class Convai2EvalWorld(MultiAgentDialogWorld):
                 if self.turn_idx >= self.n_turn:
                     acts = [None]
 
+                    #KNOWLEDGE CHECK
+                    for idx, agent in enumerate(self.agents):
+                        control_msg['text'] = KNOWLEDGE_MSG
+                        agent.observe(validate(control_msg))
+                        acts[idx] = agent.act(timeout=self.max_resp_time)
+                        while acts[idx]['text'] not in self.ratings:
+                            control_msg['text'] = NAN_MSG
+                            agent.observe(validate(control_msg))
+                            acts[idx] = agent.act(timeout=self.max_resp_time)
+                        if 'text' in acts[idx] and acts[idx]['text'] in self.ratings:
+                            self.knowledge_score[idx] = float(acts[idx]['text'])
+ 
                     # Fluency Check
                     for idx, agent in enumerate(self.agents):
                         control_msg['text'] = FLUENCY_MSG
@@ -390,7 +417,8 @@ class Convai2EvalWorld(MultiAgentDialogWorld):
                             acts[idx] = agent.act(timeout=self.max_resp_time)
                         if 'text' in acts[idx] and acts[idx]['text'] in self.ratings:
                             self.consistent_score[idx] = int(acts[idx]['text'])
-                    
+ 
+                   
                     """
                     # Consistency reasoning
                     for idx, agent in enumerate(self.agents):
@@ -532,8 +560,18 @@ class Convai2EvalWorld(MultiAgentDialogWorld):
             ):
                 bad_workers.append(ag.worker_id)
                 convo_finished = False
+        
+        auto_reject = True
+        d_s = (' '.join([t[1] for t in self.dialog])).lower()
+        for w in self.personas[0].lower().split():
+            print('checking', w)
+            if w in d_s: auto_reject = False
+        if auto_reject == True:
+            print('reject! Unrelevant dialogue:', ' '.join([t[1] for t in self.dialog]))
+        
         if (
             not convo_finished
+            or auto_reject == True
             or self.dialog == []
             or self.eng_score[0] == -1
             or self.fluency_score[0] == -1
@@ -541,6 +579,7 @@ class Convai2EvalWorld(MultiAgentDialogWorld):
         ):
             for ag in self.agents:
                 ag.not_approve = True
+                ag.reject_work('It seems that the dialogue is not relevant to our topic')
                 ag.persona_generator.push_persona(ag.persona_idx)
                 print(
                     "\n*** Push persona {} back to stack. ****\n".format(ag.persona_idx)
@@ -553,7 +592,7 @@ class Convai2EvalWorld(MultiAgentDialogWorld):
         if convo_finished:
             filename = os.path.join(
                 data_path,
-                '{}_{}_{}_{}_withreasons.pkl'.format(
+                '{}_{}_{}_{}_withreasons.pt'.format(
                     self.model_name,
                     time.strftime("%Y%m%d-%H%M%S"),
                     np.random.randint(0, 1000),
@@ -563,7 +602,7 @@ class Convai2EvalWorld(MultiAgentDialogWorld):
         else:
             filename = os.path.join(
                 data_path,
-                '{}_{}_{}_{}_incomplete_withreasons.pkl'.format(
+                '{}_{}_{}_{}_incomplete_withreasons.pt'.format(
                     self.model_name,
                     time.strftime("%Y%m%d-%H%M%S"),
                     np.random.randint(0, 1000),
@@ -571,15 +610,18 @@ class Convai2EvalWorld(MultiAgentDialogWorld):
                 ),
             )
         print(self.world_tag, ': Data successfully saved at {}.'.format(filename))
-        self.personas.append(self.agents[0].model_persona[1])
+        #self.personas.append(self.agents[0].model_persona[1])
         save_d = {
+                'persona_idx': self.agents[0].persona_idx,
                 'personas': self.personas,
                 'dialog': self.dialog,
+                'auto_reject': auto_reject,
                 'workers': [ag.worker_id for ag in self.agents],
                 'hit_id': [ag.hit_id for ag in self.agents],
                 'assignment_id': [ag.assignment_id for ag in self.agents],
                 'bad_workers': bad_workers,
                 'n_turn': self.n_turn,
+                'knowledge_score': self.knowledge_score,
                 'fluency_score': self.fluency_score,
                 'fluency_reason': self.fluency_reason,
                 'eng_score': self.eng_score,
@@ -590,7 +632,8 @@ class Convai2EvalWorld(MultiAgentDialogWorld):
                 'n_personas': self.n_personas,
             },
         print('save_d:', save_d)
-        pickle.dump(save_d, open(filename, 'wb'))
+        #pickle.dump(save_d, open(filename, 'wb'))
+        torch.save(save_d, filename)
 
     def is_exact_match(self, act, ag, tolerance=0):
         if act['episode_done']:

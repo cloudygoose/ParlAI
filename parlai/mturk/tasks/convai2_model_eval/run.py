@@ -39,6 +39,16 @@ def main():
         help='path of the fairseq model',
     )
     argparser.add_argument(
+        '--model-name',
+        type=str,
+        help='name of the fairseq model',
+    )
+    argparser.add_argument(
+        '--data-path',
+        type=str,
+        help='path of saved data',
+    )
+    argparser.add_argument(
         '-mt', '--max-turns', default=10, type=int, help='maximal number of chat turns'
     )
     argparser.add_argument(
@@ -85,6 +95,12 @@ def main():
         help='Set to True to use only master turks for this'
         + ' test eval, default is %(default)s',
     )
+    argparser.add_argument(
+        '--is-sandbox',
+        type='bool',
+        default=True,
+    )
+
 
     # ADD MODEL ARGS HERE, UNCOMMENT TO USE KVMEMNN MODEL AS AN EXAMPLE
     # argparser.set_defaults(
